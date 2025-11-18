@@ -29,7 +29,8 @@ extern "C" {
 #endif
 
 #define TESTS_VULKAN_BANDWIDTH_VERSION  TEST_MKVERSION(1, 3, 2)
-#define TESTS_VULKAN_BANDWIDTH_NAME     "vk_bandwidth"
+#define TESTS_VULKAN_BANDWIDTH_READ_NAME     "vk_bandwidth_read"
+#define TESTS_VULKAN_BANDWIDTH_WRITE_NAME    "vk_bandwidth_write"
 
 test_status TestsVulkanBandwidthRegister();
 const uint64_t *VulkanBandwidthGetRegionSizes();

@@ -274,8 +274,10 @@ test_status GuiBenchmarksRegister(helper_arraylist **list, uint32_t gpu_count) {
 
     TEST_RETFAIL(_GuiBenchmarksCreateLabelsFromCapacities(&labels, VulkanBandwidthGetRegionSizes(), VulkanBandwidthGetRegionCount()));
     panel = _GuiBenchmarksNewPanel(gpu_count, "bench.membandwidth.panel", "bench.membandwidth.tooltip");
-    section = _GuiBenchmarksNewSectionMultiResult(gpu_count, panel, "bench.membandwidth.panel", &labels, "bench.membandwidth.tooltip");
-    TEST_RETFAIL(_GuiBenchmarksAddBenchmark(gpu_count, section, "bench.membandwidth.panel", "vk_bandwidth", gui_result_type_byterate));
+    section = _GuiBenchmarksNewSectionMultiResult(gpu_count, panel, "bench.memreadbandwidth.panel", &labels, "bench.memreadbandwidth.tooltip");
+    TEST_RETFAIL(_GuiBenchmarksAddBenchmark(gpu_count, section, "bench.memreadbandwidth.panel", "vk_bandwidth_read", gui_result_type_byterate));
+    section = _GuiBenchmarksNewSectionMultiResult(gpu_count, panel, "bench.memwritebandwidth.panel", &labels, "bench.memwritebandwidth.tooltip");
+    TEST_RETFAIL(_GuiBenchmarksAddBenchmark(gpu_count, section, "bench.memwritebandwidth.panel", "vk_bandwidth_write", gui_result_type_byterate));
     HelperArrayListClean(&labels);
 
     TEST_RETFAIL(_GuiBenchmarksCreateLabelsFromCapacities(&labels, VulkanLatencyGetRegionSizes(), VulkanLatencyGetRegionCount()));

@@ -50,6 +50,15 @@ test_status VulkanRunnerRegisterTests() {
     return status;
 }
 
+/// <summary>
+/// Registers a test
+/// </summary>
+/// <param name="entrypoint">Test entry point</param>
+/// <param name="config_data">Arbitrary passed to test entry point</param>
+/// <param name="test_name">Test name</param>
+/// <param name="test_version">Test version</param>
+/// <param name="graphical_context">Graphical context</param>
+/// <returns>0 = TEST_OK on success, error code otherwise</returns>
 test_status VulkanRunnerRegisterTest(vulkan_test_main *entrypoint, void *config_data, const char *const test_name, uint32_t test_version, bool graphical_context) {
     vulkan_runner_context *context = malloc(sizeof(vulkan_runner_context));
     if (context == NULL) {

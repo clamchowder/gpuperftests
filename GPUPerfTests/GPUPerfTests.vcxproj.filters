@@ -239,12 +239,9 @@
     <ClInclude Include="include\build_info.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\windows_helper.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CustomBuild Include="src\shaders\vulkan_bandwidth.comp">
+    <CustomBuild Include="src\shaders\vulkan_bandwidth_read.comp">
       <Filter>Source Files\shaders</Filter>
     </CustomBuild>
     <CustomBuild Include="src\shaders\vulkan_bandwidth_texture.comp">

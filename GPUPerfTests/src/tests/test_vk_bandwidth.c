@@ -40,6 +40,8 @@
 #define VULKAN_BANDWIDTH_TARGET_TIME_US             (250000)
 #define VULKAN_BANDWIDTH_STARTING_LOOP_COUNT        (4)
 #define VULKAN_BANDWIDTH_RNG_SEED                   (332487265)
+#define VULKAN_BANDWIDTH_TEST_TYPE_READ             (0)
+#define VULKAN_BANDWIDTH_TEST_TYPE_WRITE            (1)
 
 typedef struct vulkan_bandwidth_uniform_buffer_t {
     uint32_t loop_count;
@@ -68,12 +70,16 @@ const uint32_t vulkan_bandwidth_region_count = (uint32_t)(sizeof(vulkan_bandwidt
 static test_status _VulkanBandwidthEntry(vulkan_physical_device *device, void *config_data);
 
 test_status TestsVulkanBandwidthRegister() {
-    return VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, NULL, TESTS_VULKAN_BANDWIDTH_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    test_status status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_READ, TESTS_VULKAN_BANDWIDTH_READ_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    TEST_RETFAIL(status);
+    return VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_WRITE, TESTS_VULKAN_BANDWIDTH_WRITE_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
 }
 
 static test_status _VulkanBandwidthEntry(vulkan_physical_device *physical_device, void *config_data) {
     test_status status = TEST_OK;
     VkResult res = VK_SUCCESS;
+
+    bool write_test = ((uint64_t)config_data) == VULKAN_BANDWIDTH_TEST_TYPE_WRITE;
 
     bool use_texture = false;
 
@@ -93,7 +99,11 @@ static test_status _VulkanBandwidthEntry(vulkan_physical_device *physical_device
     }
 
     vulkan_shader shader;
-    status = VulkanShaderInitializeFromFile(&device, use_texture ? "vulkan_bandwidth_texture.spv" : "vulkan_bandwidth.spv", VK_SHADER_STAGE_COMPUTE_BIT, &shader);
+    const char* bandwidth_test_shader_path = "vulkan_bandwidth_read.spv";
+    if (write_test) bandwidth_test_shader_path = "vulkan_bandwidth_write.spv";
+    if (use_texture) bandwidth_test_shader_path = "vulkan_bandwidth_texture.spv";
+    INFO("Will use shader %s\n", bandwidth_test_shader_path);
+    status = VulkanShaderInitializeFromFile(&device, bandwidth_test_shader_path, VK_SHADER_STAGE_COMPUTE_BIT, &shader);
     if (!TEST_SUCCESS(status)) {
         goto cleanup_device;
     }

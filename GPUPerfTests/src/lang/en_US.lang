@@ -52,6 +52,10 @@ gui.popup.about.buildinfo.branch.local=Local Branch
 // Benchmark - Cache & Memory Bandwidth
 bench.membandwidth.panel=Cache & Memory Bandwidth
 bench.membandwidth.tooltip=Measures bandwidth across a wide range of region sizes, showing cache boundaries as well as the bandwidth of each cache level and global memory.
+bench.memreadbandwidth.panel=Read Bandwidth
+bench.memreadbandwidth.tooltip=Measures bandwidth using read accesses. This represents the majority of accesses
+bench.memwritebandwidth.panel=Write Bandwidth
+bench.memwritebandwidth.panel=Measures bandwidth using writes.
 
 // Benchmark - Cache & Memory Latency
 bench.memlatency.panel=Cache & Memory Latency
