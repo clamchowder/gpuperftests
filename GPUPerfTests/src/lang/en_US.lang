@@ -53,9 +53,11 @@ gui.popup.about.buildinfo.branch.local=Local Branch
 bench.membandwidth.panel=Cache & Memory Bandwidth
 bench.membandwidth.tooltip=Measures bandwidth across a wide range of region sizes, showing cache boundaries as well as the bandwidth of each cache level and global memory.
 bench.memreadbandwidth.panel=Read Bandwidth
-bench.memreadbandwidth.tooltip=Measures bandwidth using read accesses. This represents the majority of accesses
+bench.memreadbandwidth.tooltip=Measures bandwidth using read accesses. This represents the majority of memory accesses on a GPU
 bench.memwritebandwidth.panel=Write Bandwidth
 bench.memwritebandwidth.panel=Measures bandwidth using writes.
+bench.memtexreadbandwidth.panel=Texture Read Bandwidth
+bench.memtexreadbandwidth.tooltip=Measures bandwidth using texture accesses
 
 // Benchmark - Cache & Memory Latency
 bench.memlatency.panel=Cache & Memory Latency
@@ -63,7 +65,7 @@ bench.memlatency.tooltip=Measures latency across a wide range of region sizes, s
 bench.memlatency.section.vector=Vector Cache & Memory Latency
 bench.memlatency.section.scalar=Scalar Cache & Memory Latency
 bench.memlatency.tooltip.vector=Measures latency using vector data loads, this is the standard memory access method.
-bench.memlatency.tooltip.scalar=Measures latency using scalar data loads, on some GPUs this may be faster than vector loads but it is only applicable to some workloads.
+bench.memlatency.tooltip.scalar=Measures latency using scalar data loads, on some GPUs this may be faster than vector loads but is only applicable when the compiler can determine the access will be constant across a wave.
 
 // Benchmark - Uplink Bandwidth & Latency
 bench.uplink.panel=Uplink Bandwidth & Latency
