@@ -55,9 +55,9 @@ bench.membandwidth.tooltip=Measures bandwidth across a wide range of region size
 bench.memreadbandwidth.panel=Read Bandwidth
 bench.memreadbandwidth.tooltip=Measures bandwidth using read accesses. This represents the majority of memory accesses on a GPU
 bench.memwritebandwidth.panel=Write Bandwidth
-bench.memwritebandwidth.panel=Measures bandwidth using writes.
+bench.memwritebandwidth.tooltip=Measures bandwidth using writes.
 bench.memtexreadbandwidth.panel=Texture Read Bandwidth
-bench.memtexreadbandwidth.tooltip=Measures bandwidth using texture accesses
+bench.memtexreadbandwidth.tooltip=Measures bandwidth using texture accesses. This is an unfinished, as-is test.
 
 // Benchmark - Cache & Memory Latency
 bench.memlatency.panel=Cache & Memory Latency
