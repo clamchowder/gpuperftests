@@ -21,6 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <intrin.h>
+
 #include "main.h"
 #include "logger.h"
 #include "vulkan_helper.h"
@@ -43,6 +45,7 @@
 #define VULKAN_UPLINK_TEST_TYPE_COMPUTE_WRITE   5
 #define VULKAN_UPLINK_TEST_TYPE_MEMCPY_READ     6
 #define VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE    7
+#define VULKAN_UPLINK_TEST_TYPE_NT_WRITE        8
 
 #define VULKAN_UPLINK_TARGET_TIME_US                (1000000)       // 1 second
 #define VULKAN_UPLINK_TIME_CUTOFF_US                (500000)        // 0.5 seconds
@@ -64,6 +67,8 @@ typedef struct vulkan_uplink_thread_data_t {
     uint32_t *source_memory;
     uint32_t *destination_memory;
     uint32_t block_size;
+
+    // Thread reports the number of block_size sized cycles it has gone over the data
     uint32_t cycles;
 } vulkan_uplink_thread_data;
 
@@ -75,8 +80,9 @@ static vulkan_uplink_thread_data **memcpy_thread_data;
 static test_status _VulkanUplinkEntry(vulkan_physical_device *device, void *config_data);
 static test_status _VulkanUplinkInitializeMemcpyThreads(uint32_t *source, uint32_t *destination, uint64_t size);
 static void _VulkanUplinkCleanUpMemcpyThreads();
-static uint64_t _VulkanUplinkMemcpy();
+static uint64_t _VulkanUplinkMemcpy(uint32_t test_type);
 static void _VulkanUplinkMemcpyThreadFunc(uint32_t thread_id, void *data);
+static void _VulkanUplinkNTWriteThreadFunc(uint32_t thread_id, void* data);
 
 test_status TestsVulkanUplinkRegister() {
     test_status status = VulkanRunnerRegisterTest(&_VulkanUplinkEntry, (void *)VULKAN_UPLINK_TEST_TYPE_READ, TESTS_VULKAN_UPLINK_CPU_READ_NAME, TESTS_VULKAN_UPLINK_VERSION, false);
@@ -95,6 +101,7 @@ test_status TestsVulkanUplinkRegister() {
     TEST_RETFAIL(status);
     status = VulkanRunnerRegisterTest(&_VulkanUplinkEntry, (void *)VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE, TESTS_VULKAN_UPLINK_MAP_WRITE_NAME, TESTS_VULKAN_UPLINK_VERSION, false);
     TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanUplinkEntry, (void*)VULKAN_UPLINK_TEST_TYPE_NT_WRITE, TESTS_VULKAN_UPLINK_NT_WRITE_NAME, TESTS_VULKAN_UPLINK_VERSION, false);
     return status;
 }
 
@@ -195,7 +202,12 @@ static test_status _VulkanUplinkEntry(vulkan_physical_device *physical_device, v
         }
     }
     uint32_t device_memory_flags = 0;
-    if (test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_READ || test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_LATENCY_SHORT || test_type == VULKAN_UPLINK_TEST_TYPE_LATENCY_LONG) {
+    if (test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_READ || 
+        test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE || 
+        test_type == VULKAN_UPLINK_TEST_TYPE_LATENCY_SHORT || 
+        test_type == VULKAN_UPLINK_TEST_TYPE_LATENCY_LONG ||
+        test_type == VULKAN_UPLINK_TEST_TYPE_NT_WRITE) {
+        // Check if device supports host-visible memory
         device_memory_flags |= VULKAN_MEMORY_VISIBLE;
         if (!VulkanMemoryIsMemoryTypePresent(physical_device, device_memory_flags)) {
             status = TEST_VK_FEATURE_UNSUPPORTED;
@@ -379,9 +391,14 @@ static test_status _VulkanUplinkEntry(vulkan_physical_device *physical_device, v
 
         VulkanMemoryUnmap(device_region);
     } else {
-        bool write_test = (test_type == VULKAN_UPLINK_TEST_TYPE_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_COMPUTE_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE);
+        // write_test determines source and destination selection
+        // if write_test, source = host region, destination = device region. Reversed otherwise
+        // i.e. write_test indicates whether we are writing to device memory
+        bool write_test = (test_type == VULKAN_UPLINK_TEST_TYPE_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_COMPUTE_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_NT_WRITE);
         bool compute_test = (test_type == VULKAN_UPLINK_TEST_TYPE_COMPUTE_READ || test_type == VULKAN_UPLINK_TEST_TYPE_COMPUTE_WRITE);
-        bool mapped_test = (test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_READ || test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE);
+
+        // Mapped = Device memory mapped into program's VA space
+        bool mapped_test = (test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_READ || test_type == VULKAN_UPLINK_TEST_TYPE_MEMCPY_WRITE || test_type == VULKAN_UPLINK_TEST_TYPE_NT_WRITE);
         vulkan_region *uniform_region = NULL;
         if (compute_test) {
             uniform_region = VulkanMemoryGetRegion(&uniform_memory, "uniform buffer");
@@ -437,6 +454,7 @@ static test_status _VulkanUplinkEntry(vulkan_physical_device *physical_device, v
                 status = TEST_VK_MEMORY_MAPPING_ERROR;
                 goto cleanup_host_memory;
             }
+
             status = _VulkanUplinkInitializeMemcpyThreads(source_memory, destination_memory, allocation_size);
             if (!TEST_SUCCESS(status)) {
                 goto cleanup_host_memory;
@@ -527,7 +545,8 @@ static test_status _VulkanUplinkEntry(vulkan_physical_device *physical_device, v
                         transfer_cycles++;
                     } else {
                         //memcpy(destination_memory, source_memory, allocation_size);
-                        memcpy_total_data = _VulkanUplinkMemcpy();
+                        INFO("Executing memcpy helper\n");
+                        memcpy_total_data = _VulkanUplinkMemcpy(test_type);
                     }
                     uint64_t current_runtime = HelperGetTimestamp();
                     if ((first_cycle || mapped_test) && current_runtime >= VULKAN_UPLINK_TIME_CUTOFF_US) {
@@ -659,14 +678,25 @@ static void _VulkanUplinkCleanUpMemcpyThreads() {
     }
 }
 
-static uint64_t _VulkanUplinkMemcpy() {
+// Exercises host-to-device link bandwidth with multiple host threads
+static uint64_t _VulkanUplinkMemcpy(uint32_t test_type) {
     HelperAtomicBoolSet(&memcpy_thread_run_flag);
-    memcpy_threads = HelperCreateThreads(memcpy_thread_count, _VulkanUplinkMemcpyThreadFunc, (void **)memcpy_thread_data);
+    helper_thread_func test_func = _VulkanUplinkMemcpyThreadFunc;
+    if (test_type == VULKAN_UPLINK_TEST_TYPE_NT_WRITE) {
+        test_func = _VulkanUplinkNTWriteThreadFunc;
+        INFO("Using NT write func\n");
+    }
+
+    memcpy_threads = HelperCreateThreads(memcpy_thread_count, test_func, (void **)memcpy_thread_data);
     if (memcpy_threads == NULL) {
         return 0;
     }
+
     HelperSleep(VULKAN_UPLINK_TARGET_TIME_US / 1000);
     HelperAtomicBoolClear(&memcpy_thread_run_flag);
+
+    INFO("Waiting for threads to finish\n");
+
     HelperWaitForThreads(memcpy_threads, memcpy_thread_count);
     HelperCleanUpThreads(memcpy_threads, memcpy_thread_count);
 
@@ -685,6 +715,40 @@ static void _VulkanUplinkMemcpyThreadFunc(uint32_t thread_id, void *data) {
     if (thread_data->block_size >= VULKAN_UPLINK_MINIMUM_COPY_SIZE) {
         while (HelperAtomicBoolRead(&memcpy_thread_run_flag)) {
             memcpy(thread_data->destination_memory, thread_data->source_memory, thread_data->block_size);
+            thread_data->cycles++;
+        }
+    }
+}
+
+static void _VulkanUplinkNTWriteThreadFunc(uint32_t therad_id, void* data) {
+    vulkan_uplink_thread_data* thread_data = (vulkan_uplink_thread_data*)data;
+    uint64_t dummy_data[2] = { 0xDEADBEEFDEADBEEF, 0xFACEDEADDEADBEEF }; // 128 bit
+    __m128i dummy_vec = _mm_load_si128((const __m128i *)dummy_data);
+
+    if (thread_data->block_size >= VULKAN_UPLINK_MINIMUM_COPY_SIZE) {
+        while (HelperAtomicBoolRead(&memcpy_thread_run_flag)) {
+            //memcpy(thread_data->destination_memory, thread_data->source_memory, thread_data->block_size);
+
+            // prologue. byte by byte until we're 16B aligned, after which we can use SSE2
+            uint32_t byte_idx = 0;
+            char *dst_ptr = (char*)(thread_data->destination_memory);
+            while (((((uint64_t)dst_ptr) & 0xF) != 0) && byte_idx < thread_data->block_size) {
+                dst_ptr[byte_idx] = 1;
+                byte_idx++;
+            }
+
+            // 128-bit chunks
+            while (byte_idx + 16 < thread_data->block_size) {
+                _mm_stream_si128((__m128i*)(dst_ptr + byte_idx), dummy_vec);
+                byte_idx += 16;
+            }
+
+            // epilogue
+            for (; byte_idx < thread_data->block_size; byte_idx++) {
+                dst_ptr[byte_idx] = 1;
+            }
+
+            // Calculation is done in terms of memcpy cycles
             thread_data->cycles++;
         }
     }

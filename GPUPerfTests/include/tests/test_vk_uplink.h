@@ -35,6 +35,7 @@ extern "C" {
 #define TESTS_VULKAN_UPLINK_GPU_WRITE_NAME          "vk_uplink_compute_write"
 #define TESTS_VULKAN_UPLINK_MAP_READ_NAME           "vk_uplink_mapped_read"
 #define TESTS_VULKAN_UPLINK_MAP_WRITE_NAME          "vk_uplink_mapped_write"
+#define TESTS_VULKAN_UPLINK_NT_WRITE_NAME           "vk_uplink_nt_write"
 #define TESTS_VULKAN_UPLINK_CPU_LATENCY_NAME        "vk_uplink_latency"
 #define TESTS_VULKAN_UPLINK_CPU_LATENCY_LONG_NAME   "vk_uplink_latency_long"
 
