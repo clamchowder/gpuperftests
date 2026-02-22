@@ -33,8 +33,9 @@
 #include "latency_helper.h"
 #include "tests/test_vk_latency.h"
 
+// change stride to 4096 for CPU
 #define VULKAN_LATENCY_TARGET_TIME_US               (250000)                                /* Target execution time to get accurate results */
-#define VULKAN_LATENCY_HOP_STRIDE_BYTES             (512)                                   /* Maximum cache line size that can be tricked (region must be a multiple of this) - must match value in shader */
+#define VULKAN_LATENCY_HOP_STRIDE_BYTES             (4096)                                   /* Maximum cache line size that can be tricked (region must be a multiple of this) - must match value in shader */
 #define VULKAN_LATENCY_HOPS_PER_CYCLE               (64)                                    /* Pointer fetches per loop cycle to minimize loop logic overhead */
 #define VULKAN_LATENCY_STARTING_HOPS                (1024 / VULKAN_LATENCY_HOPS_PER_CYCLE)  /* Minimum amount of fetches to execute */
 #define VULKAN_LATENCY_POINTER_SIZE                 (sizeof(uint32_t))                      /* Size of our beloved pointer - must match value in shader */
@@ -43,6 +44,10 @@
 
 #define VULKAN_LATENCY_TEST_TYPE_VECTOR             (0)
 #define VULKAN_LATENCY_TEST_TYPE_SCALAR             (1)
+#define VULKAN_LATENCY_TEST_TYPE_VECTOR_HOST        (2)
+#define VULKAN_LATENCY_TEST_TYPE_SCALAR_HOST        (3)
+#define VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE      (4)
+#define VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE_CACHED  (5)
 
 typedef struct vulkan_latency_uniform_buffer_t {
     uint32_t hop_count;
@@ -72,13 +77,24 @@ static test_status _VulkanLatencyEntry(vulkan_physical_device *device, void *con
 test_status TestsVulkanLatencyRegister() {
     test_status status = VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_SCALAR, TESTS_VULKAN_LATENCY_SCLR_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
     TEST_RETFAIL(status);
-    return VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_VECTOR, TESTS_VULKAN_LATENCY_VEC_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
+    status = VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_VECTOR, TESTS_VULKAN_LATENCY_VEC_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_VECTOR_HOST, TESTS_VULKAN_LATENCY_VEC_HOST_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_SCALAR_HOST, TESTS_VULKAN_LATENCY_SCLR_HOST_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE, TESTS_VULKAN_LATENCY_CPU_TO_DEVICE_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanLatencyEntry, (void*)(uint64_t)VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE_CACHED, TESTS_VULKAN_LATENCY_CPU_TO_DEVICE_NAME, TESTS_VULKAN_LATENCY_VERSION, false);
+    return status;
 }
 
+// config data is the test type
 static test_status _VulkanLatencyEntry(vulkan_physical_device *physical_device, void *config_data) {
     test_status status = TEST_OK;
     VkResult res = VK_SUCCESS;
-    bool scalar_test = ((uint64_t)config_data) == VULKAN_LATENCY_TEST_TYPE_SCALAR;
+    uint64_t test_type = (uint64_t)config_data;
+    bool scalar_test = (test_type == VULKAN_LATENCY_TEST_TYPE_SCALAR) || (test_type == VULKAN_LATENCY_TEST_TYPE_SCALAR_HOST);
 
     latency_helper_lru lru;
     status = LatencyHelperLRUInitialize(&lru, VULKAN_LATENCY_HOP_STRIDE_BYTES);
@@ -128,7 +144,17 @@ static test_status _VulkanLatencyEntry(vulkan_physical_device *physical_device, 
         goto cleanup_shader;
     }
     vulkan_memory memory;
-    status = VulkanMemoryInitialize(&device, VULKAN_MEMORY_NORMAL, &memory);
+    uint32_t memory_type = VULKAN_MEMORY_NORMAL;
+    if (test_type == VULKAN_LATENCY_TEST_TYPE_SCALAR_HOST || test_type == VULKAN_LATENCY_TEST_TYPE_VECTOR_HOST) {
+        memory_type |= VULKAN_MEMORY_HOST_LOCAL | VULKAN_MEMORY_VISIBLE;
+    }
+    else if (test_type == VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE || test_type == VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE_CACHED) {
+        memory_type |= VULKAN_MEMORY_VISIBLE;
+        if (test_type == VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE_CACHED) memory_type |= VULKAN_MEMORY_HOST_CACHED;
+    }
+
+    // note, memory type is set in memory handle
+    status = VulkanMemoryInitialize(&device, memory_type, &memory);
     if (!TEST_SUCCESS(status)) {
         goto cleanup_pipeline;
     }
@@ -180,7 +206,7 @@ static test_status _VulkanLatencyEntry(vulkan_physical_device *physical_device, 
             if (!TEST_SUCCESS(status)) {
                 goto cleanup_pipeline;
             }
-            status = VulkanMemoryInitialize(&device, VULKAN_MEMORY_NORMAL, &memory);
+            status = VulkanMemoryInitialize(&device, memory_type, &memory);
             if (!TEST_SUCCESS(status)) {
                 goto cleanup_pipeline;
             }
@@ -268,34 +294,51 @@ static test_status _VulkanLatencyEntry(vulkan_physical_device *physical_device, 
             uniform_buffer_memory->region_size = (uint32_t)(hops_needed_per_full_pass);
             uniform_buffer_memory->per_wg_offset = uniform_buffer_memory->region_size / workgroups;
             memcpy((void*)uniform_buffer_memory->lru, lru.lru_table, sizeof(uniform_buffer_memory->lru));
-
             VulkanMemoryUnmap(uniform_region);
 
-            status = VulkanCommandBufferStart(&command_sequence);
-            if (!TEST_SUCCESS(status)) {
-                goto free_results;
+            // --- test section ---
+            uint32_t current = 0;
+            if (test_type == VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE || test_type == VULKAN_LATENCY_TEST_TYPE_CPU_TO_DEVICE_CACHED) {
+                volatile uint32_t* device_memory = VulkanMemoryMap(data_region_1);
+                HelperResetTimestamp();
+                current = device_memory[0];
+                for (uint64_t hop_idx = 0; hop_idx < hop_count * VULKAN_LATENCY_HOPS_PER_CYCLE; hop_idx++) {
+                    current = device_memory[current];
+                }
+
+                // sink. cannot happen because test uses larger stride
+                if (current == 3) 
+                    DEBUG("Note, hit mid cacheline\n");
+                VulkanMemoryUnmap(data_region_1);
             }
-            status = VulkanCommandBufferBindComputePipeline(&command_sequence, &pipeline);
-            if (!TEST_SUCCESS(status)) {
-                goto cleanup_command_sequence;
+            else {
+                status = VulkanCommandBufferStart(&command_sequence);
+                if (!TEST_SUCCESS(status)) {
+                    goto free_results;
+                }
+                status = VulkanCommandBufferBindComputePipeline(&command_sequence, &pipeline);
+                if (!TEST_SUCCESS(status)) {
+                    goto cleanup_command_sequence;
+                }
+                status = VulkanCommandBufferDispatch(&command_sequence, workgroups, 1, 1);
+                if (!TEST_SUCCESS(status)) {
+                    goto cleanup_command_sequence;
+                }
+                status = VulkanCommandBufferEnd(&command_sequence);
+                if (!TEST_SUCCESS(status)) {
+                    goto cleanup_command_sequence;
+                }
+                HelperResetTimestamp();
+                status = VulkanCommandBufferSubmit(&command_sequence);
+                if (!TEST_SUCCESS(status)) {
+                    goto cleanup_command_sequence;
+                }
+                status = VulkanCommandBufferWait(&command_sequence, VULKAN_COMMAND_SEQUENCE_WAIT_INFINITE);
+                if (!TEST_SUCCESS(status)) {
+                    goto cleanup_command_sequence;
+                }
             }
-            status = VulkanCommandBufferDispatch(&command_sequence, workgroups, 1, 1);
-            if (!TEST_SUCCESS(status)) {
-                goto cleanup_command_sequence;
-            }
-            status = VulkanCommandBufferEnd(&command_sequence);
-            if (!TEST_SUCCESS(status)) {
-                goto cleanup_command_sequence;
-            }
-            HelperResetTimestamp();
-            status = VulkanCommandBufferSubmit(&command_sequence);
-            if (!TEST_SUCCESS(status)) {
-                goto cleanup_command_sequence;
-            }
-            status = VulkanCommandBufferWait(&command_sequence, VULKAN_COMMAND_SEQUENCE_WAIT_INFINITE);
-            if (!TEST_SUCCESS(status)) {
-                goto cleanup_command_sequence;
-            }
+            // -- end of test section
             uint64_t time = HelperMarkTimestamp();
             float time_per_hop_ns = 0;
             if (!warmup) {

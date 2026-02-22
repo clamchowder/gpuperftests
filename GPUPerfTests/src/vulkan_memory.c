@@ -548,6 +548,7 @@ void *VulkanMemoryMap(vulkan_region *region_handle) {
     return (void *)((uint64_t)pool->mapped_pool_base + region_handle->global_offset);
 }
 
+// unmaps memory from host
 void VulkanMemoryUnmap(vulkan_region *region_handle) {
     if (region_handle == NULL || !region_handle->is_mapped) {
         return;
