@@ -21,8 +21,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <intrin.h>
-
 #include "main.h"
 #include "logger.h"
 #include "vulkan_helper.h"
@@ -36,6 +34,14 @@
 #include "vulkan_staging.h"
 #include "latency_helper.h"
 #include "tests/test_vk_uplink.h"
+
+#ifdef __x86_64__
+#ifdef _MSC_VER
+#include <intrin.h>
+#else
+#include <immintrin.h>
+#endif
+#endif
 
 #define VULKAN_UPLINK_TEST_TYPE_READ            0
 #define VULKAN_UPLINK_TEST_TYPE_WRITE           1
@@ -709,6 +715,7 @@ static uint64_t _VulkanUplinkMemcpy(uint32_t test_type) {
     return total_data;
 }
 
+// Continuously performs memcpy from source -> dest with given block size, until a stop flag is set
 static void _VulkanUplinkMemcpyThreadFunc(uint32_t thread_id, void *data) {
     vulkan_uplink_thread_data *thread_data = (vulkan_uplink_thread_data *)data;
 
@@ -720,15 +727,14 @@ static void _VulkanUplinkMemcpyThreadFunc(uint32_t thread_id, void *data) {
     }
 }
 
-static void _VulkanUplinkNTWriteThreadFunc(uint32_t therad_id, void* data) {
+#ifdef __x86_64__
+static void _VulkanUplinkNTWriteThreadFunc(uint32_t thread_id, void* data) {
     vulkan_uplink_thread_data* thread_data = (vulkan_uplink_thread_data*)data;
     uint64_t dummy_data[2] = { 0xDEADBEEFDEADBEEF, 0xFACEDEADDEADBEEF }; // 128 bit
     __m128i dummy_vec = _mm_load_si128((const __m128i *)dummy_data);
 
     if (thread_data->block_size >= VULKAN_UPLINK_MINIMUM_COPY_SIZE) {
         while (HelperAtomicBoolRead(&memcpy_thread_run_flag)) {
-            //memcpy(thread_data->destination_memory, thread_data->source_memory, thread_data->block_size);
-
             // prologue. byte by byte until we're 16B aligned, after which we can use SSE2
             uint32_t byte_idx = 0;
             char *dst_ptr = (char*)(thread_data->destination_memory);
@@ -753,3 +759,27 @@ static void _VulkanUplinkNTWriteThreadFunc(uint32_t therad_id, void* data) {
         }
     }
 }
+#endif
+
+#ifdef __aarch64__
+static void _VulkanUplinkNTWriteThreadFunc(uint32_t thread_id, void* data) {
+    vulkan_uplink_thread_data* thread_data = (vulkan_uplink_thread_data*)data;
+    uint64_t dummy_data = 0xDEADBEEF;
+
+    if (thread_data->block_size >= VULKAN_UPLINK_MINIMUM_COPY_SIZE) {
+        while (HelperAtomicBoolRead(&memcpy_thread_run_flag)) {
+            // placeholder
+            // todo: see if we can use arm intrinsics. for now this will probably suck and relies on the CPU
+            // to auto-switch into streaming mode on seeing enough consecutive cachelines overwritten
+            // just assume it's a multiple of 8B
+            uint64_t* dst_ptr = (uint64_t*)(thread_data->destination_memory);
+            for (uint32_t i = 0; i < thread_data->block_size / sizeof(uint64_t); i++) {
+                dst_ptr[i] = dummy_data;
+            }
+
+            // Calculation is done in terms of memcpy cycles
+            thread_data->cycles++;
+        }
+    }
+}
+#endif

@@ -34,6 +34,7 @@ extern "C" {
 #define TESTS_VULKAN_LATENCY_VEC_HOST_NAME "vk_latency_host_vector"
 #define TESTS_VULKAN_LATENCY_SCLR_HOST_NAME "vk_latency_host_scalar"
 #define TESTS_VULKAN_LATENCY_CPU_TO_DEVICE_NAME "vk_latency_cpu_to_device"
+#define TESTS_VULKAN_LATENCY_CPU_TO_DEVICE_CACHED_NAME "vk_latency_cpu_to_device_cached"
 
 test_status TestsVulkanLatencyRegister();
 const uint64_t *VulkanLatencyGetRegionSizes();

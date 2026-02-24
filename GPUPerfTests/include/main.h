@@ -31,6 +31,18 @@
 #include <stdbool.h>
 #include <limits.h>
 
+
+/* architecture detection for intrinsics.
+   test MSVC defines, set the corresponding GCC ones,
+   then use GCC-style ifdefs in code */
+#ifdef _M_AMD64
+#define __x86_64__
+#endif
+
+#ifdef __ARM_ARCH
+#define __aarch64__
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -43,6 +43,8 @@
 #define VULKAN_BANDWIDTH_TEST_TYPE_READ             (0)
 #define VULKAN_BANDWIDTH_TEST_TYPE_WRITE            (1)
 #define VULKAN_BANDWIDTH_TEST_TYPE_TEXTURE_READ     (2)
+#define VULKAN_BANDWIDTH_TEST_TYPE_HOST_READ        (3)
+#define VULKAN_BANDWIDTH_TEST_TYPE_HOST_WRITE       (4)
 
 typedef struct vulkan_bandwidth_uniform_buffer_t {
     uint32_t loop_count;
@@ -75,15 +77,22 @@ test_status TestsVulkanBandwidthRegister() {
     TEST_RETFAIL(status);
     status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_WRITE, TESTS_VULKAN_BANDWIDTH_WRITE_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
     TEST_RETFAIL(status);
-    return VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_TEXTURE_READ, TESTS_VULKAN_BANDWIDTH_TEX_READ_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_TEXTURE_READ, TESTS_VULKAN_BANDWIDTH_TEX_READ_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_HOST_READ, TESTS_VULKAN_BANDWIDTH_HOST_READ_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_HOST_WRITE, TESTS_VULKAN_BANDWIDTH_HOST_WRITE_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    return status;
 }
 
 static test_status _VulkanBandwidthEntry(vulkan_physical_device *physical_device, void *config_data) {
     test_status status = TEST_OK;
     VkResult res = VK_SUCCESS;
 
-    bool write_test = ((uint64_t)config_data) == VULKAN_BANDWIDTH_TEST_TYPE_WRITE;
-    bool use_texture = ((uint64_t)config_data) == VULKAN_BANDWIDTH_TEST_TYPE_TEXTURE_READ;
+    uint64_t test_type = (uint64_t)config_data;
+
+    bool write_test = (test_type == VULKAN_BANDWIDTH_TEST_TYPE_WRITE) || (test_type == VULKAN_BANDWIDTH_TEST_TYPE_HOST_WRITE);
+    bool use_texture = test_type == VULKAN_BANDWIDTH_TEST_TYPE_TEXTURE_READ;
 
     INFO("Device Name: %s\n", physical_device->physical_properties.properties.deviceName);
 
@@ -134,7 +143,11 @@ static test_status _VulkanBandwidthEntry(vulkan_physical_device *physical_device
         goto cleanup_shader;
     }
     vulkan_memory memory;
-    status = VulkanMemoryInitialize(&device, VULKAN_MEMORY_NORMAL, &memory);
+    uint32_t memory_type = VULKAN_MEMORY_NORMAL;
+    if (test_type == VULKAN_BANDWIDTH_TEST_TYPE_HOST_READ || test_type == VULKAN_BANDWIDTH_TEST_TYPE_HOST_WRITE) {
+        memory_type |= VULKAN_MEMORY_HOST_LOCAL | VULKAN_MEMORY_VISIBLE;
+    }
+    status = VulkanMemoryInitialize(&device, memory_type, &memory);
     if (!TEST_SUCCESS(status)) {
         goto cleanup_pipeline;
     }
