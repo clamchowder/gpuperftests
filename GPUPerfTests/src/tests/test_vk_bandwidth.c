@@ -45,6 +45,7 @@
 #define VULKAN_BANDWIDTH_TEST_TYPE_TEXTURE_READ     (2)
 #define VULKAN_BANDWIDTH_TEST_TYPE_HOST_READ        (3)
 #define VULKAN_BANDWIDTH_TEST_TYPE_HOST_WRITE       (4)
+#define VULKAN_BANDWIDTH_TEST_TYPE_ZERO_READ        (5)
 
 typedef struct vulkan_bandwidth_uniform_buffer_t {
     uint32_t loop_count;
@@ -82,6 +83,8 @@ test_status TestsVulkanBandwidthRegister() {
     status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_HOST_READ, TESTS_VULKAN_BANDWIDTH_HOST_READ_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
     TEST_RETFAIL(status);
     status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_HOST_WRITE, TESTS_VULKAN_BANDWIDTH_HOST_WRITE_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
+    TEST_RETFAIL(status);
+    status = VulkanRunnerRegisterTest(&_VulkanBandwidthEntry, (void*)(uint64_t)VULKAN_BANDWIDTH_TEST_TYPE_ZERO_READ, TESTS_VULKAN_BANDWIDTH_READ_ZEROES_NAME, TESTS_VULKAN_BANDWIDTH_VERSION, false);
     return status;
 }
 
@@ -309,7 +312,11 @@ static test_status _VulkanBandwidthEntry(vulkan_physical_device *physical_device
         }
     } else {
         vulkan_region *data_region_1 = VulkanMemoryGetRegion(&memory, "data buffer 1");
-        status = BufferFillerRandomFloats(data_region_1, VULKAN_BANDWIDTH_RNG_SEED);
+
+        if (test_type == VULKAN_BANDWIDTH_TEST_TYPE_ZERO_READ)
+            status = BufferFillerValueFloat(data_region_1, 0.0f);
+        else
+            status = BufferFillerRandomFloats(data_region_1, VULKAN_BANDWIDTH_RNG_SEED);
         if (!TEST_SUCCESS(status)) {
             goto free_memory2;
         }

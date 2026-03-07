@@ -40,7 +40,9 @@
 #endif
 
 #ifdef __ARM_ARCH
+#ifndef __aarch64__
 #define __aarch64__
+#endif
 #endif
 
 #ifdef __cplusplus

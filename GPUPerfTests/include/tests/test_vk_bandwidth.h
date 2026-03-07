@@ -34,6 +34,7 @@ extern "C" {
 #define TESTS_VULKAN_BANDWIDTH_TEX_READ_NAME "vk_bandwidth_tex_read"
 #define TESTS_VULKAN_BANDWIDTH_HOST_READ_NAME     "vk_bandwidth_host_read"
 #define TESTS_VULKAN_BANDWIDTH_HOST_WRITE_NAME    "vk_bandwidth_host_write"
+#define TESTS_VULKAN_BANDWIDTH_READ_ZEROES_NAME   "vk_bandwidth_zero_read"
 
 test_status TestsVulkanBandwidthRegister();
 const uint64_t *VulkanBandwidthGetRegionSizes();

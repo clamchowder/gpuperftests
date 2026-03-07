@@ -302,7 +302,7 @@ static test_status _VulkanLatencyEntry(vulkan_physical_device *physical_device, 
                 volatile uint32_t* device_memory = VulkanMemoryMap(data_region_1);
                 HelperResetTimestamp();
                 current = device_memory[0];
-                for (uint64_t hop_idx = 0; hop_idx < hop_count * VULKAN_LATENCY_HOPS_PER_CYCLE; hop_idx++) {
+                for (uint64_t hop_idx = 0; hop_idx < (hop_count * VULKAN_LATENCY_HOPS_PER_CYCLE * workgroups); hop_idx++) {
                     current = device_memory[current];
                 }
 
